@@ -130,14 +130,14 @@ public static class MsgPackSerialize
                         return [0xDD, .. lenBuf, .. buf];
                     }
                 }
-            case IDictionary<object, object?> dictionary :
+            case System.Collections.IDictionary dictionary:
                 {
-                    uint count = (uint)dictionary.LongCount();
+                    uint count = (uint)dictionary.Count;
                     if (count == 0)
                         return [0x80];
 
                     List<byte> buf = [];
-                    foreach (var kvp in dictionary)
+                    foreach (System.Collections.DictionaryEntry kvp in dictionary)
                     {
                         buf.AddRange(Serialize(kvp.Key));
                         buf.AddRange(Serialize(kvp.Value));
@@ -158,8 +158,6 @@ public static class MsgPackSerialize
                         return [0xDF, .. lenBuf, .. buf];
                     }
                 }
-            case System.Collections.IDictionary dict:
-                throw new Exception("Use IDictionary<object, object> instead of non-generic IDictionary.");
             default:
                 {
                     var members = typeof(T).GetMembers(BindingFlags.Instance | BindingFlags.Public)
