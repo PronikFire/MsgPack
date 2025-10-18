@@ -9,7 +9,7 @@ namespace MsgPack;
 
 public static class MsgPackSerialize
 {
-    public static byte[] Serialize<T>(T obj)
+    public static byte[] Serialize(object? obj)
     {
         if (obj == null)
             return [0xC0];
@@ -160,11 +160,7 @@ public static class MsgPackSerialize
                 }
             default:
                 {
-                    var members = typeof(T).GetMembers(BindingFlags.Instance | BindingFlags.Public)
-                        .Where(m => (m.MemberType == MemberTypes.Field || m.MemberType == MemberTypes.Property)
-                            && m.GetCustomAttribute<MsgPackIgnoreAttribute>() is null);
-
-                    var fields = typeof(T).GetFields().Where(f => f.GetCustomAttribute<MsgPackIgnoreAttribute>() is null);
+                    var fields = obj.GetType().GetFields().Where(f => f.GetCustomAttribute<MsgPackIgnoreAttribute>() is null);
                     
                     Dictionary<string, object> objDictionary = [];
                     foreach (var field in fields)
