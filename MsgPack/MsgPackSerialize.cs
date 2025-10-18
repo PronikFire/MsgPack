@@ -71,7 +71,7 @@ public static class MsgPackSerialize
                     return [0xCB, .. buf];
                 }
             case string strValue:
-                var bytes = Encoding.ASCII.GetBytes(strValue);
+                var bytes = Encoding.UTF8.GetBytes(strValue);
                 uint len = (uint)bytes.LongLength;
                 if (len <= 31)
                     return [(byte)(0xA0 | len), .. bytes];
@@ -160,11 +160,14 @@ public static class MsgPackSerialize
                 }
             default:
                 {
-                    var fields = obj.GetType().GetFields().Where(f => f.GetCustomAttribute<MsgPackIgnoreAttribute>() is null);
+                    var fields = obj.GetType().GetFields();
                     
                     Dictionary<string, object> objDictionary = [];
                     foreach (var field in fields)
                     {
+                        if (field.GetCustomAttribute<MsgPackIgnoreAttribute>() is not null)
+                            continue;
+
                         string name = field.GetCustomAttribute<MsgPackNameAttribute>()?.Name ?? field.Name;
                         objDictionary.Add(name, field.GetValue(obj)!);
                     }
@@ -177,15 +180,17 @@ public static class MsgPackSerialize
     public static T Deserialize<T>(Span<byte> data)
     {
         object? deserialized = Deserialize(data);
-        if (deserialized is not Dictionary<object, object?> dict
-            || dict.Count == 0
-            || dict.Keys.Any(k => k is not string))
+        if (deserialized is not Dictionary<object, object?> dict || dict.Count == 0)
             throw new Exception("Deserialized data cannot be converted to the target type.");
 
-        T obj = Activator.CreateInstance<T>();
-        var fields = typeof(T).GetFields().Where(f => f.GetCustomAttribute<MsgPackIgnoreAttribute>() is null);
+        var type = typeof(T);
+        object obj = type.IsValueType ? Activator.CreateInstance(type)! : Activator.CreateInstance<T>();
+        var fields = type.GetFields();
         foreach (var field in fields)
         {
+            if (field.GetCustomAttribute<MsgPackIgnoreAttribute>() is not null)
+                continue;
+
             string name = field.GetCustomAttribute<MsgPackNameAttribute>()?.Name ?? field.Name;
             if (!dict.TryGetValue(name, out object? value))
                 throw new Exception($"Field '{name}' not found in the deserialized data.");
@@ -198,7 +203,7 @@ public static class MsgPackSerialize
                 field.SetValue(obj, value);
             }
         }
-        return obj;
+        return (T)obj;
     }
 
 
@@ -210,6 +215,10 @@ public static class MsgPackSerialize
 
         switch (data[0])
         {
+            case > 0x00 and < 0x7F:
+                return data[0];
+            case > 0xE0 and < 0xFF:
+                return -(data[0] & 0x1F);
             case 0xCC:
                 length = 2;
                 return data[1];
@@ -246,19 +255,19 @@ public static class MsgPackSerialize
                 return BinaryPrimitives.ReadDoubleBigEndian(data[1..9]);
             case >= 0xA0 and <= 0xBF:
                 length = (uint)(1 + (data[0] & 0x1F));
-                return Encoding.ASCII.GetString(data[1..(int)length]);
+                return Encoding.UTF8.GetString(data[1..(int)length]);
             case 0xD9:
                 length = (uint)(2 + data[1]);
-                return Encoding.ASCII.GetString(data[2..(int)length]);
+                return Encoding.UTF8.GetString(data[2..(int)length]);
             case 0xDA:
                 {
                     length = (uint)(3 + BinaryPrimitives.ReadUInt16BigEndian(data[1..3]));
-                    return Encoding.ASCII.GetString(data[3..(int)length]);
+                    return Encoding.UTF8.GetString(data[3..(int)length]);
                 }
             case 0xDB:
                 {
                     length = 5 + BinaryPrimitives.ReadUInt32BigEndian(data[1..5]);
-                    return Encoding.ASCII.GetString(data[5..(int)length]);
+                    return Encoding.UTF8.GetString(data[5..(int)length]);
                 }
             case 0xC4:
                 {
