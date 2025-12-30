@@ -2,7 +2,6 @@
 using System.Reflection;
 using System.Text;
 using System.Collections.Generic;
-using System.Linq;
 using System;
 
 namespace MsgPack;
@@ -161,14 +160,19 @@ public static class MsgPackSerialize
             default:
                 {
                     var fields = obj.GetType().GetFields();
-                    
+                    Array.Sort(fields, (a, b) =>
+                    {
+                        var orderA = a.GetCustomAttribute<MsgPackOrder>()?.order ?? 0;
+                        var orderB = b.GetCustomAttribute<MsgPackOrder>()?.order ?? 0;
+                        return orderA.CompareTo(orderB);
+                    });
                     Dictionary<string, object> objDictionary = [];
                     foreach (var field in fields)
                     {
                         if (field.GetCustomAttribute<MsgPackIgnoreAttribute>() is not null)
                             continue;
 
-                        string name = field.GetCustomAttribute<MsgPackNameAttribute>()?.Name ?? field.Name;
+                        string name = field.GetCustomAttribute<MsgPackNameAttribute>()?.name ?? field.Name;
                         objDictionary.Add(name, field.GetValue(obj)!);
                     }
                     return Serialize(objDictionary);
@@ -191,9 +195,9 @@ public static class MsgPackSerialize
             if (field.GetCustomAttribute<MsgPackIgnoreAttribute>() is not null)
                 continue;
 
-            string name = field.GetCustomAttribute<MsgPackNameAttribute>()?.Name ?? field.Name;
+            string name = field.GetCustomAttribute<MsgPackNameAttribute>()?.name ?? field.Name;
             if (!dict.TryGetValue(name, out object? value))
-                throw new Exception($"Field '{name}' not found in the deserialized data.");
+                continue;
             try
             {
                 field.SetValue(obj, Convert.ChangeType(value, field.FieldType));
@@ -215,9 +219,9 @@ public static class MsgPackSerialize
 
         switch (data[0])
         {
-            case > 0x00 and < 0x7F:
+            case >= 0x00 and <= 0x7F:
                 return data[0];
-            case > 0xE0 and < 0xFF:
+            case >= 0xE0 and <= 0xFF:
                 return -(data[0] & 0x1F);
             case 0xCC:
                 length = 2;

@@ -3,6 +3,7 @@
 namespace MsgPack;
 
 [AttributeUsage(AttributeTargets.Field)]
-public class MsgPackIgnoreAttribute : Attribute
+public class MsgPackOrder(int order) : Attribute
 {
+    public int order;
 }
