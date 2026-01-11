@@ -1,8 +1,9 @@
-﻿using System.Buffers.Binary;
+﻿using System;
+using System.Buffers.Binary;
+using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Text;
-using System.Collections.Generic;
-using System;
 
 namespace MsgPack;
 
@@ -159,21 +160,39 @@ public static class MsgPackSerialize
                 }
             default:
                 {
-                    var fields = obj.GetType().GetFields();
-                    Array.Sort(fields, (a, b) =>
-                    {
-                        var orderA = a.GetCustomAttribute<MsgPackOrder>()?.order ?? 0;
-                        var orderB = b.GetCustomAttribute<MsgPackOrder>()?.order ?? 0;
-                        return orderA.CompareTo(orderB);
-                    });
-                    Dictionary<string, object> objDictionary = [];
-                    foreach (var field in fields)
-                    {
-                        if (field.GetCustomAttribute<MsgPackIgnoreAttribute>() is not null)
-                            continue;
+                    var members = obj.GetType().GetMembers(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+                        .Where(mI =>
+                        {
+                            if (mI.CustomAttributes.Any(cA => cA.AttributeType == typeof(MsgPackIgnoreAttribute)))
+                                return false;
 
-                        string name = field.GetCustomAttribute<MsgPackNameAttribute>()?.name ?? field.Name;
-                        objDictionary.Add(name, field.GetValue(obj)!);
+                            if (mI.MemberType != MemberTypes.Field && mI.MemberType != MemberTypes.Property)
+                                return false;
+
+                            if (mI.MemberType == MemberTypes.Field
+                            && !mI.CustomAttributes.Any(cA => cA.AttributeType == typeof(MsgPackIncludeAttribute)))
+                                return false;
+
+                            return true;
+                        });
+                    members.OrderBy(mI => mI.GetCustomAttribute<MsgPackOrder>()?.order ?? 0);
+                    Dictionary<string, object> objDictionary = [];
+                    foreach (var member in members)
+                    {
+                        string name = member.GetCustomAttribute<MsgPackNameAttribute>()?.name ?? member.Name;
+                        object value = null;
+                        switch (member)
+                        {
+                            case FieldInfo field:
+                                value = field.GetValue(obj)!;
+                                break;
+                            case PropertyInfo property:
+                                value = property.GetValue(obj)!;
+                                break;
+                            default:
+                                throw new Exception("Unexpected member type.");
+                        }
+                        objDictionary.Add(name, value!);
                     }
                     return Serialize(objDictionary);
                 }
@@ -187,27 +206,28 @@ public static class MsgPackSerialize
         if (deserialized is not Dictionary<object, object?> dict || dict.Count == 0)
             throw new Exception("Deserialized data cannot be converted to the target type.");
 
-        var type = typeof(T);
-        object obj = type.IsValueType ? Activator.CreateInstance(type)! : Activator.CreateInstance<T>();
-        var fields = type.GetFields();
-        foreach (var field in fields)
-        {
-            if (field.GetCustomAttribute<MsgPackIgnoreAttribute>() is not null)
-                continue;
+        var result = Activator.CreateInstance<T>();
 
-            string name = field.GetCustomAttribute<MsgPackNameAttribute>()?.name ?? field.Name;
+        var members = typeof(T).GetMembers(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .Where(mI => mI.MemberType == MemberTypes.Field || mI.MemberType == MemberTypes.Property);
+
+        foreach (var member in members)
+        {
+            string name = member.GetCustomAttribute<MsgPackNameAttribute>()?.name ?? member.Name;
             if (!dict.TryGetValue(name, out object? value))
                 continue;
-            try
+
+            switch (member)
             {
-                field.SetValue(obj, Convert.ChangeType(value, field.FieldType));
-            }
-            catch
-            {
-                field.SetValue(obj, value);
+                case FieldInfo field:
+                    field.SetValue(result, value);
+                    break;
+                case PropertyInfo property:
+                    property.SetValue(result, value);
+                    break;
             }
         }
-        return (T)obj;
+        return result!;
     }
 
 

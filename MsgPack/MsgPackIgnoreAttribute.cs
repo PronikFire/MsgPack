@@ -2,7 +2,7 @@
 
 namespace MsgPack;
 
-[AttributeUsage(AttributeTargets.Field)]
+[AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
 public class MsgPackIgnoreAttribute : Attribute
 {
 }

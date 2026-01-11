@@ -2,8 +2,8 @@
 
 namespace MsgPack;
 
-[AttributeUsage(AttributeTargets.Field)]
+[AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
 public class MsgPackOrder(int order) : Attribute
 {
-    public int order;
+    public readonly int order = order;
 }

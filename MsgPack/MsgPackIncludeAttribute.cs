@@ -3,7 +3,6 @@
 namespace MsgPack;
 
 [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
-public class MsgPackNameAttribute(string name) : Attribute
+public class MsgPackIncludeAttribute : Attribute
 {
-    public string name = name;
 }
